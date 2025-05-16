@@ -1,3 +1,4 @@
+
 using LegendrePolynomials
 
 #Evaluate the spherical harmonics.
@@ -20,7 +21,7 @@ function bispectrum(crystal,cutoff)
             θ = atan(centerAtomC[2]/centerAtom[1])
             ϕ = atan(centerAtom[3]/ centerAtom)
             ljvals .+= singleAtomLJ(crystal,centerAtomC,iCenter,loopBounds,params,cutoff)    # These two loops are to loop over all possible neighbor atoms
-        end
+        
     end
 
 end
