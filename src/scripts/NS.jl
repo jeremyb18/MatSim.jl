@@ -24,7 +24,7 @@ LJ_average = PlotsMH.LJAverages(resultsPath)
 input = YAML.load_file(joinpath(cDir,"NS.yml"))
 species = ["Ag", "Pt"]
 fcc = ase.fromPOSCAR(joinpath(cDir,"POSCAR.fcc"),["Ag"])
-sc = ase.fromPOSCAR(joinpath(cDir,"POSCAR.sc"),["Ag"])
+#sc = ase.fromPOSCAR(joinpath(cDir,"POSCAR.sc"),["Ag"])
 myNS = nSampling.initialize(input["params"],species,LJ_average)# Initialize the simulation...
 #walk_params = Dict("n_steps"=>myNS.n_single_walker_steps, "volume_step_size"=>myNS.volume_step_size, "shear_step_size" => myNS.shear_step_size, "stretch_step_size" => myNS.stretch_step_size,"max_volume_per_atom"=>myNS.max_volume_per_atom, "min_aspect_ratio"=>myNS.min_aspect_ratio)
 check = myNS.walkers[1].positions
