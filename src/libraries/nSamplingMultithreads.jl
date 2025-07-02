@@ -7,9 +7,13 @@ using StaticArrays
 using LinearAlgebra
 using Distributions
 using Random
+using Plots
 using TimerOutputs
 using Base.Threads
-
+# volume_step_size = []
+# shear_step_size = []
+# stretch_step_size = []
+# MD_time_step = []
 mutable struct NS_walker_params
     n_single_walker_steps:: Int64
     MC_atom_step_size:: Float64
@@ -106,22 +110,22 @@ function initialize(inputs,model)
     max_lc = (nAtoms * inputs["max_volume_per_atom"])^(1/3)  # This is the maximum atom separation.
     latticeConstant = (nAtoms * inputs["max_volume_per_atom"] * rand()^(1/(nAtoms + 1)))^(1/3)
     lVecs = SMatrix{3,3,Float64,9}([1.0 0.0 0.0; 0.0 1.0 0.0; 0.0 0.0 1.0])
-#    error("stopping")
+    #    error("stopping")
     configs = [ase.initialize_cell_shape(latticeConstant,lVecs,nTypes) for i in 1:inputs["n_walkers"]]
     if haskey(inputs, "cell_P")
         inputs["KE_max"] = 3/2 * inputs["cell_P"] * inputs["max_volume_per_atom"] * nAtoms
     end
     walker_params = NS_walker_params(inputs)
-#    walk_params = Dict("n_steps" => 10,
-#                       "shear_step_size" => inputs["shear_step_size"],
-#                       "stretch_step_size" => inputs["stretch_step_size"])
+    #    walk_params = Dict("n_steps" => 10,
+    #                       "shear_step_size" => inputs["shear_step_size"],
+    #                       "stretch_step_size" => inputs["stretch_step_size"])
     # Now do a random walk on the cell shape and place atoms at random positions
     save_n_steps = walker_params.n_single_walker_steps
     walker_params.n_single_walker_steps = 10
     for iConfig = 1:inputs["n_walkers"]
         configs[iConfig] = do_cell_shape_walk!(configs[iConfig],walker_params,inputs["cell_P"])
         ase.set_atoms_random!(configs[iConfig],inputs["min_atom_separation"])
-#        error("Stop")
+    #        error("Stop")
         ase.set_masses(configs[iConfig],1.0)
         if lowercase(inputs["atom_algorithm"]) == "md"
             ase.set_random_unit_velocities!(configs[iConfig],walker_params.KE_max)
@@ -136,17 +140,24 @@ function initialize(inputs,model)
 end
 
 function adjust_step_sizes!(walk_params,key,rate)
-
+    global volume_step_size
+    global shear_step_size
+    global stretch_step_size
+    global MD_time_step
     if rate > 1//2
         if key == "volume"
             walk_params.volume_step_size *=1.05
+            #push!(volume_step_size, walk_params.volume_step_size)
         elseif key == "shear"
             walk_params.shear_step_size *=1.05
+            #push!(shear_step_size, walk_params.shear_step_size)
         elseif key == "stretch"
             walk_params.stretch_step_size *=1.05
+            #push!(stretch_step_size, walk_params.stretch_step_size)
         elseif key == "atoms"
             if walk_params.atom_algorithm == "MD"
                 walk_params.MD_time_step *=1.02
+                #push!(MD_time_step, walk_params.MD_time_step)
             else
                 walk_params.MC_atom_step_size *=1.05
             end
@@ -155,13 +166,17 @@ function adjust_step_sizes!(walk_params,key,rate)
     elseif rate < 1//4
         if key == "volume"
             walk_params.volume_step_size *=0.95
+            #push!(volume_step_size, walk_params.volume_step_size)
         elseif key == "shear"
             walk_params.shear_step_size *=0.95
+            #push!(shear_step_size, walk_params.shear_step_size)
         elseif key == "stretch"
             walk_params.stretch_step_size *=0.95
+            #push!(stretch_step_size, walk_params.stretch_step_size)
         elseif key == "atoms"
             if walk_params.atom_algorithm == "MD"
                 walk_params.MD_time_step *=0.98
+                #push!(MD_time_step, walk_params.MD_time_step)
             else
                 walk_params.MC_atom_step_size *=0.95
             end
@@ -177,18 +192,19 @@ function tune_step_sizes!(NS,model::LennardJones.model)
     sEnergies =  reverse(sortperm([i.energies[2] for i in NS.walkers]))
     keeps = sEnergies[NS.n_cull + 1: end]
     E_max = NS.walkers[sEnergies[1]].energies[2]
-    atoms = ase.copy_atoms(NS.walkers[sample(keeps,1)[1]])
-
+    #atoms = ase.copy_atoms(NS.walkers[sample(keeps,1)[1]])
+    
    
     allGood = false
     index = 0
-    chosen_sets = sample(keeps,nthreads(), replace=false)
+    
     
     
     #orig_atoms = ase.copy_atoms(atoms)
     while !allGood
         index += 1
         println("E-max", E_max)
+        chosen_sets = sample(keeps,nthreads(), replace=false)
         #passed_test = 0
         a_rates = Dict("volume" => [0,0], "shear" => [0,0], "stretch" => [0,0], "atoms" => [0,0])
         @threads for chosen_set in chosen_sets
@@ -236,10 +252,16 @@ end
 
 
 function run_NS(NS::NS,LJ::LennardJones.model)
-
+    # global volume_step_size
+    # global shear_step_size
+    # global stretch_step_size
+    # global MD_time_step
+    # ng_volume = []
+    # ng_shear = []
+    # ng_stretch = []
+    # ng_MD_time = []
     V = (NS.n_walkers - NS.n_cull + 1)/(NS.n_walkers + 1)
     cDir = pwd()
-
     i = 1
     io = open(joinpath(cDir,"NS.out"),"w")
     write(io, "N_walkers = " * string(NS.n_walkers) * "\n")
@@ -269,8 +291,12 @@ function run_NS(NS::NS,LJ::LennardJones.model)
         println("KE (lowest energy cull): ", ase.eval_KE(NS.walkers[perms[NS.n_cull]]))
         println("Total (lowest energy cull): ", ase.eval_energy(NS.walkers[perms[NS.n_cull]],LJ,P= NS.cell_P))
 
-        if notGood#i %12 == 0  # 12 is pretty arbitrary.. Need a better way to see if need to re-tune
+        if notGood
             println("Stopping to retune step sizes")
+            # length(volume_step_size) != 0 && push!(ng_volume,length(volume_step_size))
+            # length(shear_step_size) != 0 && push!(ng_shear,length(shear_step_size))
+            # length(stretch_step_size) != 0 && push!(ng_stretch,length(stretch_step_size))
+            # length(MD_time_step) != 0 && push!(ng_MD_time,length(MD_time_step))
             energies_before = [ase.eval_energy(walker, LJ, P = NS.cell_P) for walker in NS.walkers]
             tune_step_sizes!(NS,LJ)
             energies_after = [ase.eval_energy(walker, LJ, P = NS.cell_P) for walker in NS.walkers]
@@ -282,50 +308,55 @@ function run_NS(NS::NS,LJ::LennardJones.model)
         end
         ###############################MULTITHREADING##########################
         a_rates = Dict("volume" => [0,0], "shear" => [0,0], "stretch" => [0,0], "atoms" => [0,0])
-        for replace_walker in forDelete
-            NS.walkers[replace_walker] = ase.copy_atoms(NS.walkers[sample(keeps,1)[1]])
-        end   
         np = nthreads()
         if  ceil(NS.walker_params.n_single_walker_steps/np) < 20
             error("not all threads are being used")
             np = floor(NS.walker_params.n_single_walker_steps/20)
-        end   
-        if length(forDelete) > np
-            error("inefficient number of threads")
-        elseif length(forDelete) == np
-            chosen_walkers = forDelete
-        else
-            extra_walkers = sample(keeps,np-length(forDelete), replace=false)
-            chosen_walkers = vcat(extra_walkers,forDelete)
-        end  
-        
-        
-        @threads for chosen_walker in chosen_walkers
-            a_rate = walk_single_walker_multithread!(NS.walkers[chosen_walker],LJ,NS.walker_params,E_max,NS.cell_P,length(chosen_walkers))
+        end
+        for replace_walker in forDelete
+            NS.walkers[replace_walker] = ase.copy_atoms(NS.walkers[sample(keeps,1)[1]])
+            extra_walkers = sample(keeps,np-1, replace=false)
+            chosen_walkers = push!(extra_walkers,replace_walker)
+            @threads for chosen_walker in chosen_walkers
+                a_rate = walk_single_walker_multithread!(NS.walkers[chosen_walker],LJ,NS.walker_params,E_max,NS.cell_P,np)
+                for key in keys(a_rates)
+                    a_rates[key][1] += a_rate[key][1]
+                    a_rates[key][2] += a_rate[key][2]
+                end
+            end
             for key in keys(a_rates)
-                a_rates[key][1] += a_rate[key][1]
-                a_rates[key][2] += a_rate[key][2]
+                rate = a_rates[key][2]/a_rates[key][1]
+                if rate <= 1/4 || rate >= 1/2
+                    notGood = true
+                    adjust_step_sizes!(NS.walker_params,key,rate)
+                end
+                
+
             end
-        end
-        for key in keys(a_rates)
-            rate = a_rates[key][2]/a_rates[key][1]
-            if rate <= 1/4 || rate >= 4/8
-                notGood = true
-            end
-            adjust_step_sizes!(NS.walker_params,key,rate)
-        end
-   
+        end   
         
             
         i += 1
         V = ((NS.n_walkers - NS.n_cull + 1)/(NS.n_walkers + 1))^i
-        #V = ((NS.n_walkers - 1 + 1)/(NS.n_walkers + 1))^i
         write(io,string(V) * " ")
         write(io,string(E_max) * " \n")
 
     end
 
     close(io)
+
+    # plot(volume_step_size,title="volume_step_size")
+    # scatter!(ng_volume, volume_step_size[ng_volume], color=:red, marker=:circle, label="Red Dots")
+    # savefig("1_volume_step_size.png")
+    # plot(shear_step_size,title="shear_step_size")
+    # scatter!(ng_shear, shear_step_size[ng_shear], color=:red, marker=:circle, label="Red Dots")
+    # savefig("1_shear_step_size.png")
+    # plot(stretch_step_size,title="stretch_step_size")
+    # scatter!(ng_stretch, stretch_step_size[ng_stretch], color=:red, marker=:circle, label="Red Dots")
+    # savefig("1_stretch_step_size.png")
+    # plot(MD_time_step,title="MD_time_step")
+    # scatter!(ng_MD_time, MD_time_step[ng_MD_time], color=:red, marker=:circle, label="Red Dots")
+    # savefig("1_MD_time_step.png")
 end
 
 

@@ -25,10 +25,18 @@ myNS = nSamplingMultithreads.initialize(input["params"],LJ_average);# 10k alloca
 nSamplingMultithreads.tune_step_sizes!(myNS,LJ_average)
 @time nSamplingMultithreads.run_NS(myNS,LJ_average)
 
-data = readdlm("NS.out")
-energy = data[5:end, 2]
-plot(energy,title="Min Energy: $(energy[end])", xlabel="Iterations", ylabel="Energy")
-savefig("Energy_by_Iteration.png")
+# data = readdlm("NS.out")
+# energy = data[5:end, 2]
+# V = data[5:end, 1]
+# plot(energy,title="Min Energy: $(energy[end])", xlabel="Iterations", ylabel="Energy")
+# savefig("Energy_by_Iteration.png")
+
+
+# plot(V,energy,title="Min Energy: $(energy[end])", xlabel="V", ylabel="Energy")
+# plot!(xscale=:log10)
+# savefig("Energy_by_ConfigurationSpace.png")
+
+
 
 # Disregard all below
 #=
