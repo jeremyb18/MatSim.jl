@@ -140,10 +140,10 @@ function initialize(inputs,model)
 end
 
 function adjust_step_sizes!(walk_params,key,rate)
-    global volume_step_size
-    global shear_step_size
-    global stretch_step_size
-    global MD_time_step
+    # global volume_step_size
+    # global shear_step_size
+    # global stretch_step_size
+    # global MD_time_step
     if rate > 1//2
         if key == "volume"
             walk_params.volume_step_size *=1.05
